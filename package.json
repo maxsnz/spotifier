@@ -1,0 +1,26 @@
+{
+  "name": "spotifier",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx ./src/index.ts",
+    "dev": "tsx watch ./src/index.ts"
+  },
+  "dependencies": {
+    "@koa/router": "^12.0.1",
+    "@types/koa": "^2.15.0",
+    "@types/koa-bodyparser": "^4.3.12",
+    "@types/koa__router": "^12.0.4",
+    "@types/spotify-web-api-node": "^5.0.11",
+    "dotenv": "^16.4.5",
+    "fs": "^0.0.1-security",
+    "koa": "^2.15.3",
+    "koa-bodyparser": "^4.4.1",
+    "path": "^0.12.7",
+    "spotify-web-api-node": "^5.0.2",
+    "telegraf": "^4.16.3",
+    "tsx": "^4.7.2"
+  },
+  "devDependencies": {}
+}
