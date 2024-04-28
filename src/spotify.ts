@@ -15,17 +15,10 @@ class SpotifyClient {
     if (!process.env.SPOTIFY_CLIENT_SECRET)
       throw new Error("SPOTIFY_CLIENT_SECRET is not provided");
 
-    console.log(
-      process.env.SPOTIFY_CLIENT_ID,
-      process.env.SPOTIFY_CLIENT_SECRET,
-    );
-
     this.instance = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     });
-
-    console.log("Instance SpotifyWebApicreated");
 
     this.authorizeApi();
   }
@@ -33,7 +26,6 @@ class SpotifyClient {
   async authorizeApi() {
     try {
       const creds = await this.instance.clientCredentialsGrant();
-      console.log("creds", creds);
 
       this.instance.setAccessToken(creds.body["access_token"]);
     } catch (e) {
