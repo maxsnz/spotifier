@@ -3,6 +3,7 @@ import path from "path";
 import SpotifyWebApi from "spotify-web-api-node";
 import fs from "fs";
 import { info } from "./info";
+import { logError } from "./utils/logError";
 
 dotenv.config();
 
@@ -23,8 +24,14 @@ class SpotifyClient {
   }
 
   async authorizeApi() {
-    const creds = await this.instance.clientCredentialsGrant();
-    this.instance.setAccessToken(creds.body["access_token"]);
+    try {
+      const creds = await this.instance.clientCredentialsGrant();
+      console.log("creds", creds);
+
+      this.instance.setAccessToken(creds.body["access_token"]);
+    } catch (e) {
+      logError(e);
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import {
   getTrackId,
   getPlaylist,
 } from "./spotify";
+import { logError } from "./utils/logError";
 dotenv.config();
 
 class Bot {
@@ -79,7 +80,7 @@ ${playlist.tracks
           );
         }
       } catch (error) {
-        console.error(error);
+        logError(error);
         await ctx.reply("An error occurred. Please try again later.");
       }
     });
