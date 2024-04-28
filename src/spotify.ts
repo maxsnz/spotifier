@@ -6,10 +6,30 @@ import { info } from "./info";
 
 dotenv.config();
 
-if (!process.env.SPOTIFY_CLIENT_ID)
-  throw new Error("SPOTIFY_CLIENT_ID is not provided");
-if (!process.env.SPOTIFY_CLIENT_SECRET)
-  throw new Error("SPOTIFY_CLIENT_SECRET is not provided");
+class SpotifyClient {
+  instance: SpotifyWebApi;
+  constructor() {
+    if (!process.env.SPOTIFY_CLIENT_ID)
+      throw new Error("SPOTIFY_CLIENT_ID is not provided");
+    if (!process.env.SPOTIFY_CLIENT_SECRET)
+      throw new Error("SPOTIFY_CLIENT_SECRET is not provided");
+
+    this.instance = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    });
+
+    this.authorizeApi();
+  }
+
+  async authorizeApi() {
+    const creds = await this.instance.clientCredentialsGrant();
+    this.instance.setAccessToken(creds.body["access_token"]);
+  }
+}
+
+export const spotifyClient = new SpotifyClient();
+export const spotifyApi = spotifyClient.instance;
 
 const cacheDir = "./cache";
 const audioFeaturesDir = path.join(cacheDir, "audioFeatures");
@@ -17,25 +37,6 @@ const trackDataDir = path.join(cacheDir, "trackData");
 const playlistsDir = path.join(cacheDir, "playlists");
 // const pauseSeconds = 2; // Пауза в секундах
 // const limit = 50; // Лимит треков на одну итерацию
-
-const spotifyApi = new SpotifyWebApi({
-  clientId: process.env.SPOTIFY_CLIENT_ID,
-  clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-});
-
-async function authorizeApi() {
-  const creds = await spotifyApi.clientCredentialsGrant();
-  spotifyApi.setAccessToken(creds.body["access_token"]);
-}
-
-authorizeApi();
-
-// Функция задержки
-function delay(seconds: number) {
-  return new Promise((resolve) =>
-    setTimeout(resolve, seconds * 1000),
-  );
-}
 
 // Функции работы с кэшем
 function readCache(cachePath: string) {
