@@ -41,10 +41,7 @@ const cacheDir = "./cache";
 const audioFeaturesDir = path.join(cacheDir, "audioFeatures");
 const trackDataDir = path.join(cacheDir, "trackData");
 const playlistsDir = path.join(cacheDir, "playlists");
-// const pauseSeconds = 2; // Пауза в секундах
-// const limit = 50; // Лимит треков на одну итерацию
 
-// Функции работы с кэшем
 function readCache(cachePath: string) {
   if (fs.existsSync(cachePath)) {
     return JSON.parse(fs.readFileSync(cachePath, "utf-8"));
