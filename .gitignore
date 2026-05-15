@@ -26,3 +26,5 @@ dist-server
 .env
 .adminjs
 cache/*/*.json
+# Claude Code (local agent state)
+.claude/
