@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>SpotifyMeowBot</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .container {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        width: 90%;
+        max-width: 500px;
+        text-align: center;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 1.5rem;
+        font-size: 2rem;
+      }
+
+      .input-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e1e5e9;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: border-color 0.3s ease;
+        margin-bottom: 1rem;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .search-button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+      }
+
+      .search-button:hover {
+        transform: translateY(-2px);
+      }
+
+      .search-button:active {
+        transform: translateY(0);
+      }
+
+      .result {
+        margin-top: 2rem;
+        text-align: left;
+        white-space: pre-wrap;
+        font-family: "Courier New", monospace;
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        display: none;
+        position: relative;
+      }
+
+      .copy-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: #f8f9fa;
+        color: #6c757d;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        opacity: 0.8;
+        transition: background-color 0.2s ease;
+      }
+
+      .copy-button:hover {
+        background: #e9ecef;
+      }
+
+      .copy-button:active {
+        transform: scale(0.95);
+      }
+
+      .copy-button svg {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+      }
+
+      .copy-button svg .st0 {
+        fill: currentColor;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        margin: 1rem 0;
+      }
+
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        color: #dc3545;
+        background: #f8d7da;
+        border-left-color: #dc3545;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎵 SpotifyMeowBot</h1>
+      <div class="input-group">
+        <input
+          type="text"
+          id="query"
+          placeholder="Enter Spotify link or search query (e.g., 'Artist - Title')"
+          class="search-input"
+        />
+        <button class="search-button" onclick="processQuery()">
+          Search
+        </button>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+      </div>
+
+      <div class="result" id="result">
+        <button
+          class="copy-button"
+          onclick="copyResult()"
+          title="Copy to clipboard"
+        >
+          <svg
+            version="1.1"
+            id="Layer_1"
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+            x="0px"
+            y="0px"
+            viewBox="0 0 115.77 122.88"
+            style="enable-background: new 0 0 115.77 122.88"
+            xml:space="preserve"
+          >
+            <style type="text/css">
+              .st0 {
+                fill-rule: evenodd;
+                clip-rule: evenodd;
+              }
+            </style>
+            <g>
+              <path
+                class="st0"
+                d="M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z"
+              />
+            </g>
+          </svg>
+        </button>
+        <div id="result-content"></div>
+      </div>
+    </div>
+
+    <script>
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      async function processQuery() {
+        const query = document.getElementById("query").value.trim();
+        if (!query) {
+          alert("Please enter a query");
+          return;
+        }
+
+        showLoading();
+
+        try {
+          const response = await fetch("/api/process", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            showResult(data.result);
+            // Clear input on successful submission
+            document.getElementById("query").value = "";
+            retryCount = 0; // Reset retry count on success
+          } else {
+            showError(data.error || "An error occurred");
+          }
+        } catch (error) {
+          retryCount++;
+          if (retryCount <= maxRetries) {
+            showError(
+              `Network error. Retrying... (${retryCount}/${maxRetries})`,
+            );
+            // Retry after 1 second
+            setTimeout(() => {
+              processQuery();
+            }, 1000);
+          } else {
+            showError(
+              "Network error after 3 retries. Please try again later.",
+            );
+            retryCount = 0; // Reset for next attempt
+          }
+        }
+      }
+
+      function showLoading() {
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("result").style.display = "none";
+      }
+
+      function showResult(result) {
+        document.getElementById("loading").style.display = "none";
+        const resultDiv = document.getElementById("result");
+        const resultContent =
+          document.getElementById("result-content");
+        resultDiv.className = "result";
+        resultDiv.style.display = "block";
+        resultContent.textContent = result;
+      }
+
+      function showError(error) {
+        document.getElementById("loading").style.display = "none";
+        const resultDiv = document.getElementById("result");
+        const resultContent =
+          document.getElementById("result-content");
+        resultDiv.className = "result error";
+        resultDiv.style.display = "block";
+        resultContent.textContent = error;
+      }
+
+      async function copyResult() {
+        const resultContent =
+          document.getElementById("result-content");
+        const text = resultContent.textContent;
+
+        try {
+          await navigator.clipboard.writeText(text);
+          // Show brief feedback with color change only
+          const copyButton = document.querySelector(".copy-button");
+          const originalBackground = copyButton.style.background;
+          copyButton.style.background = "#d4edda";
+          copyButton.style.borderColor = "#c3e6cb";
+          setTimeout(() => {
+            copyButton.style.background = originalBackground;
+            copyButton.style.borderColor = "#dee2e6";
+          }, 1000);
+        } catch (err) {
+          // Fallback for older browsers
+          const textArea = document.createElement("textarea");
+          textArea.value = text;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+
+          // Show feedback with color change only
+          const copyButton = document.querySelector(".copy-button");
+          const originalBackground = copyButton.style.background;
+          copyButton.style.background = "#d4edda";
+          copyButton.style.borderColor = "#c3e6cb";
+          setTimeout(() => {
+            copyButton.style.background = originalBackground;
+            copyButton.style.borderColor = "#dee2e6";
+          }, 1000);
+        }
+      }
+
+      // Allow Enter key to submit
+      document
+        .getElementById("query")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            processQuery();
+          }
+        });
+    </script>
+  </body>
+</html>

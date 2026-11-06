@@ -1,13 +1,15 @@
 import * as dotenv from "dotenv";
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
-import {
-  getPlaylistId,
-  getTrackDetails,
-  getTrackId,
-  getPlaylist,
-} from "./spotify";
+import { getPlaylistId, getTrackId, spotifyClient } from "./spotify";
 import { logError } from "./utils/logError";
+import {
+  countNonZeroIntervals,
+  countSeconds,
+  getFormatTime,
+  getMedianIntervalLength,
+} from "./countTime";
+import { fileLinkQueue } from "./utils/downloadQueue";
 dotenv.config();
 
 class Bot {
@@ -25,11 +27,69 @@ class Bot {
     this.instance.on(message("text"), async (ctx) => {
       try {
         const messageText = ctx.message.text;
+        console.log("messageText", messageText);
 
         if (messageText === "/start") {
           await ctx.reply(
-            "Hi, I'm SpotifyMeowBot. Send me the link to your desired song from Spotify, and I will return the BPM info. Or send me a playlist link, and I will provide the BPMs for all the songs in the playlist.",
+            "Hi, I'm SpotifyMeowBot. Send me the link to your desired song from Spotify, and I will return track info. Or send me a playlist link, and I will provide info for all the songs in the playlist.",
           );
+          return;
+        }
+
+        if (messageText.startsWith("/count")) {
+          const input = messageText.replace("/count", "");
+          const seconds = countSeconds(input);
+          const intervalsCount = countNonZeroIntervals(input);
+          const medianTrackLength = getMedianIntervalLength(input);
+          const result = getFormatTime(seconds);
+          await ctx.replyWithMarkdown(`
+tracks count: *${intervalsCount}*
+total time: *${result}*
+average track length: *${getFormatTime(
+            Math.round(seconds / intervalsCount),
+          )}*
+median track length: *${getFormatTime(Math.round(medianTrackLength))}*
+            `);
+          return;
+        }
+
+        // If message contains ' - ', treat it as a search query
+        if (messageText.includes(" - ")) {
+          const query = messageText.trim();
+          await ctx.sendChatAction("typing");
+          try {
+            const results = await spotifyClient.searchTrack(query);
+            await ctx.reply(results);
+          } catch (error) {
+            logError(error);
+            await ctx.reply(
+              "An error occurred while searching for tracks. Please try again later.",
+            );
+          }
+          return;
+        }
+
+        // Optionally, keep /search for compatibility
+        if (messageText.startsWith("/search")) {
+          const query = messageText.replace("/search", "").trim();
+
+          if (!query) {
+            await ctx.reply(
+              "Please provide a search query. Example: /search The Beatles - Hey Jude",
+            );
+            return;
+          }
+
+          await ctx.sendChatAction("typing");
+          try {
+            const results = await spotifyClient.searchTrack(query);
+            await ctx.reply(results);
+          } catch (error) {
+            logError(error);
+            await ctx.reply(
+              "An error occurred while searching for tracks. Please try again later.",
+            );
+          }
           return;
         }
 
@@ -37,9 +97,12 @@ class Bot {
         const playlistId = getPlaylistId(messageText);
         if (trackId) {
           await ctx.sendChatAction("typing");
-          const details = await getTrackDetails(trackId);
+          const details =
+            (await spotifyClient.getTrackDetails(trackId)) || {};
 
           await ctx.replyWithMarkdown(`
+*${details.artist}* - *${details.title}*
+
 Title: *${details.title}*
 Artist: *${details.artist}*
 Album: *${details.album}*${
@@ -50,26 +113,32 @@ Label: *${details.label}*`
           }
 
 Release Date: *${details.releaseDate}*
-
-BPM: *${Math.round(details.bpm * 10) / 10}*
           `);
         } else if (playlistId) {
           await ctx.sendChatAction("typing");
-          const playlist = await getPlaylist(playlistId);
+          const playlist = await spotifyClient.getPlaylist(
+            playlistId,
+          );
           await ctx.replyWithMarkdown(`
 Title: *${playlist.playlistName}*
 Owner: *${playlist.ownerName}*
 Length: *${playlist.length}*
-Median BPM: *${Math.round(playlist.medianBPM * 10) / 10}*
 
 Tracks:
 ${playlist.tracks
-  .sort((a, b) => a.bpm - b.bpm)
+  // .sort((a, b) => {
+  //   if (a.fullTitle < b.fullTitle) {
+  //     return -1;
+  //   }
+  //   if (a.fullTitle > b.fullTitle) {
+  //     return 1;
+  //   }
+  //   return 0;
+  // })
   .map(
-    (item) =>
-      `*${Math.round(item.bpm * 10) / 10}bpm* | ${item.artist} - ${
-        item.title
-      }`,
+    (item) => `${item.artist} - ${item.title}`,
+    // `https://open.spotify.com/track/${item.id}`,
+    // `${item.fullTitle}`,
   )
   .join("\n")}
 
@@ -82,6 +151,71 @@ ${playlist.tracks
       } catch (error) {
         logError(error);
         await ctx.reply("An error occurred. Please try again later.");
+      }
+    });
+
+    // Handle audio messages
+    this.instance.on(message("audio"), async (ctx) => {
+      try {
+        const audio = ctx.message.audio;
+        if (!audio) {
+          await ctx.reply("Audio file not found");
+          return;
+        }
+
+        const fileId = audio.file_id;
+        const messageId = ctx.message.message_id;
+        const chatId = ctx.message.chat.id;
+
+        // Enqueue task to get file link
+        fileLinkQueue.enqueue({
+          fileId,
+          ctx,
+          messageId,
+          chatId,
+        });
+      } catch (error) {
+        logError(error);
+        await ctx.reply("An error occurred while processing audio file.");
+      }
+    });
+
+    // Handle document messages (for audio files sent as documents)
+    this.instance.on(message("document"), async (ctx) => {
+      try {
+        const document = ctx.message.document;
+        if (!document) {
+          await ctx.reply("Document not found");
+          return;
+        }
+
+        // Check if document is an audio file by mime type
+        const mimeType = document.mime_type || "";
+        const isAudioFile =
+          mimeType.startsWith("audio/") ||
+          /\.(mp3|wav|ogg|m4a|flac|aac|opus|wma)$/i.test(
+            document.file_name || "",
+          );
+
+        if (!isAudioFile) {
+          // Not an audio file, ignore
+          return;
+        }
+
+        const fileId = document.file_id;
+        const messageId = ctx.message.message_id;
+        const chatId = ctx.message.chat.id;
+
+        // Enqueue task to get file link
+        fileLinkQueue.enqueue({
+          fileId,
+          ctx,
+          messageId,
+          chatId,
+        });
+      } catch (error) {
+        logError(error);
+        await ctx.reply("An error occurred while processing audio file.");
       }
     });
   }

@@ -23,6 +23,28 @@ class SpotifyClient {
     this.authorizeApi();
   }
 
+  async instanceCallWrapper(
+    callName: keyof SpotifyWebApi,
+    ...args: any[]
+  ) {
+    try {
+      // @ts-ignore
+      return await this.instance[callName](...args);
+    } catch (e: unknown) {
+      if (
+        e instanceof Error &&
+        e.message.includes("The access token expired")
+      ) {
+        console.log("The access token expired");
+        await this.authorizeApi();
+        // @ts-ignore
+        return await this.instance[callName](...args);
+      } else {
+        logError(e);
+      }
+    }
+  }
+
   async authorizeApi() {
     try {
       const creds = await this.instance.clientCredentialsGrant();
@@ -32,10 +54,237 @@ class SpotifyClient {
       logError(e);
     }
   }
+
+  async fetchAllPlaylistTracks(playlistId: string) {
+    let tracks: any[] = [];
+    let offset = 0;
+    const limit = 100;
+
+    const fetch = async () => {
+      const response = await this.instanceCallWrapper(
+        "getPlaylistTracks",
+        playlistId,
+        {
+          limit,
+          offset,
+        },
+      );
+      tracks = tracks.concat(response.body.items);
+      if (response.body.next) {
+        offset += limit;
+        await fetch();
+      }
+    };
+
+    try {
+      await fetch();
+    } catch (e) {
+      logError(e);
+    }
+    return tracks;
+  }
+
+  async fetchPlaylist(playlistId: string) {
+    // const cachePath = path.join(playlistsDir, `${playlistId}.json`);
+    // const data = readCache(cachePath);
+    const data = null;
+
+    if (!data) {
+      const tracks = await this.fetchAllPlaylistTracks(playlistId);
+      let playListData = {} as any;
+      try {
+        playListData = await this.instanceCallWrapper(
+          "getPlaylist",
+          playlistId,
+        );
+      } catch (e) {
+        logError(e);
+      }
+      const playListDataBody = playListData.body;
+      const newData = { ...playListDataBody, tracks };
+      // writeCache(cachePath, newData);
+      return newData;
+    }
+
+    return data;
+  }
+
+  async processPlaylist(playlistId: string) {
+    const playlist = await this.fetchPlaylist(playlistId);
+    const tracks = playlist.tracks;
+    const tracksWithInfo = [];
+
+    for (const trackItem of tracks) {
+      const trackId = trackItem.track.id;
+      if (trackId) {
+        const info = await this.fetchAudioFeatures(trackId);
+        tracksWithInfo.push({
+          ...trackItem.track,
+          ...info,
+        });
+      }
+    }
+
+    return {
+      playlistName: playlist.name,
+      ownerName: playlist.owner.display_name,
+      length: playlist.tracks.length,
+      info: {
+        bpm: getInfo(tracksWithInfo, "tempo"),
+        energy: getInfo(tracksWithInfo, "energy"),
+        valence: getInfo(tracksWithInfo, "valence"),
+        danceability: getInfo(tracksWithInfo, "danceability"),
+      },
+    };
+  }
+
+  async fetchAudioFeatures(trackId: string) {
+    const cachePath = path.join(audioFeaturesDir, `${trackId}.json`);
+    let data = readCache(cachePath);
+    if (!data) {
+      // console.log("Fetching", trackId);
+      try {
+        data = (
+          await this.instanceCallWrapper(
+            "getAudioFeaturesForTrack",
+            trackId,
+          )
+        )?.body;
+        // data = (await this.instance.getAudioFeaturesForTrack(trackId))
+        //   .body;
+      } catch (e) {
+        logError(e);
+      }
+      writeCache(cachePath, data);
+    } else {
+      // console.log("Cached", trackId);
+    }
+    return data;
+  }
+
+  async fetchTrackData(trackId: string) {
+    const cachePath = path.join(trackDataDir, `${trackId}.json`);
+    let data = readCache(cachePath);
+    if (!data) {
+      // console.log("Fetching", trackId);
+      try {
+        data = (await this.instanceCallWrapper("getTrack", trackId))
+          .body;
+      } catch (e) {
+        logError(e);
+      }
+      writeCache(cachePath, data);
+    } else {
+      // console.log("Cached", trackId);
+    }
+    return data;
+  }
+
+  async getPlaylist(playlistId: string) {
+    const playlist = await this.fetchPlaylist(playlistId);
+    const tracks = playlist.tracks;
+    const tracksWithInfo = [];
+
+    for (const trackItem of tracks) {
+      const trackId = trackItem.track.id;
+      if (trackId) {
+        // const info = await this.fetchAudioFeatures(trackId);
+        tracksWithInfo.push({
+          id: trackId,
+          ...trackItem.track,
+          ...info,
+        });
+      }
+    }
+
+    return {
+      playlistName: playlist.name,
+      ownerName: playlist.owner.display_name,
+      length: playlist.tracks.length,
+      medianBPM: getInfo(tracksWithInfo, "tempo").median,
+      tracks: tracksWithInfo.map((item) => ({
+        id: item.id,
+        title: item.name,
+        artist: item.artists
+          .map((artist: { name: string }) => artist.name)
+          .join(", "),
+        bpm: Math.round(item.tempo * 10) / 10,
+        fullTitle: `${item.artists[0].name} - ${item.name}`,
+      })),
+    };
+  }
+
+  async getTrackDetails(trackId: string) {
+    const trackData = await this.fetchTrackData(trackId);
+    console.log("trackData", trackData);
+    // const trackFeatures =
+    //   (await this.fetchAudioFeatures(trackId)) || {};
+    // console.log("trackFeaturest", trackFeatures);
+
+    const result = {
+      title: trackData.name,
+      artist: trackData.artists
+        .map((artist: { name: string }) => artist.name)
+        .join(", "),
+      album: trackData.album.name,
+      // @ts-ignore-next-line
+      label: trackData.album.label,
+      releaseDate: trackData.album.release_date,
+      // bpm: trackFeatures
+      //   ? Math.round(trackFeatures.tempo * 10) / 10
+      //   : 0,
+      // energy: trackFeatures ? trackFeatures.energy : "",
+      // key: trackFeatures
+      //   ? `${trackFeatures.key + 1}${
+      //       parseInt(trackFeatures.mode) === 1 ? "B" : "A"
+      //     }`
+      //   : "",
+    };
+
+    return result;
+  }
+
+  async searchTrack(query: string) {
+    try {
+      const response = await this.instanceCallWrapper(
+        "searchTracks",
+        query,
+        {
+          limit: 20, // First page of results
+          type: "track",
+        },
+      );
+
+      if (!response || !response.body || !response.body.tracks) {
+        return "No tracks found";
+      }
+
+      const tracks = response.body.tracks.items;
+
+      if (tracks.length === 0) {
+        return "No tracks found";
+      }
+
+      const results = tracks.map((track: any) => {
+        const artist = track.artists
+          .map((artist: { name: string }) => artist.name)
+          .join(", ");
+        const title = track.name;
+        const spotifyUrl = track.external_urls.spotify;
+
+        return `${artist} - ${title} | ${spotifyUrl}`;
+      });
+
+      return results.join("\n");
+    } catch (e) {
+      logError(e);
+      return "Error searching for tracks";
+    }
+  }
 }
 
 export const spotifyClient = new SpotifyClient();
-export const spotifyApi = spotifyClient.instance;
+// export const spotifyApi = spotifyClient.instance;
 
 const cacheDir = "./cache";
 const audioFeaturesDir = path.join(cacheDir, "audioFeatures");
@@ -50,70 +299,15 @@ function readCache(cachePath: string) {
 }
 
 function writeCache(cachePath: string, data: any) {
-  fs.writeFileSync(cachePath, JSON.stringify(data, null, 2), "utf-8");
-}
-
-async function fetchAllPlaylistTracks(playlistId: string) {
-  let tracks: any[] = [];
-  let offset = 0;
-  const limit = 100;
-
-  async function fetch() {
-    const response = await spotifyApi.getPlaylistTracks(playlistId, {
-      limit,
-      offset,
-    });
-    tracks = tracks.concat(response.body.items);
-    if (response.body.next) {
-      offset += limit;
-      await fetch();
-    }
+  try {
+    fs.writeFileSync(
+      cachePath,
+      JSON.stringify(data, null, 2),
+      "utf-8",
+    );
+  } catch (e) {
+    logError(e);
   }
-
-  await fetch();
-  return tracks;
-}
-
-async function fetchPlaylist(playlistId: string) {
-  const cachePath = path.join(playlistsDir, `${playlistId}.json`);
-  const data = readCache(cachePath);
-
-  if (!data) {
-    const tracks = await fetchAllPlaylistTracks(playlistId);
-    const playListData = (await spotifyApi.getPlaylist(playlistId))
-      .body;
-    const newData = { ...playListData, tracks };
-    writeCache(cachePath, newData);
-    return newData;
-  }
-
-  return data;
-}
-
-async function fetchAudioFeatures(trackId: string) {
-  const cachePath = path.join(audioFeaturesDir, `${trackId}.json`);
-  let data = readCache(cachePath);
-  if (!data) {
-    // console.log("Fetching", trackId);
-    data = (await spotifyApi.getAudioFeaturesForTrack(trackId)).body;
-    writeCache(cachePath, data);
-  } else {
-    // console.log("Cached", trackId);
-  }
-  return data;
-}
-
-async function fetchTrackData(trackId: string) {
-  const cachePath = path.join(trackDataDir, `${trackId}.json`);
-  let data = readCache(cachePath);
-  if (!data) {
-    // console.log("Fetching", trackId);
-    data = (await spotifyApi.getTrack(trackId)).body;
-    writeCache(cachePath, data);
-  } else {
-    // console.log("Cached", trackId);
-  }
-  return data;
 }
 
 const getInfo = (tracks: any[], key: string) => {
@@ -129,89 +323,12 @@ const getInfo = (tracks: any[], key: string) => {
     max: Math.round(max * 10) / 10,
     median: Math.round(median * 10) / 10,
     description,
+    energy: info.energy,
+    tone: `${info.key + 1}${info.mode === "0" ? "A" : "B"}`,
   };
 
   return result;
 };
-
-export async function processPlaylist(playlistId: string) {
-  const playlist = await fetchPlaylist(playlistId);
-  const tracks = playlist.tracks;
-  const tracksWithInfo = [];
-
-  for (const trackItem of tracks) {
-    const trackId = trackItem.track.id;
-    if (trackId) {
-      const info = await fetchAudioFeatures(trackId);
-      tracksWithInfo.push({
-        ...trackItem.track,
-        ...info,
-      });
-    }
-  }
-
-  return {
-    playlistName: playlist.name,
-    ownerName: playlist.owner.display_name,
-    length: playlist.tracks.length,
-    info: {
-      bpm: getInfo(tracksWithInfo, "tempo"),
-      energy: getInfo(tracksWithInfo, "energy"),
-      valence: getInfo(tracksWithInfo, "valence"),
-      danceability: getInfo(tracksWithInfo, "danceability"),
-    },
-  };
-}
-
-export async function getPlaylist(playlistId: string) {
-  const playlist = await fetchPlaylist(playlistId);
-  const tracks = playlist.tracks;
-  const tracksWithInfo = [];
-
-  for (const trackItem of tracks) {
-    const trackId = trackItem.track.id;
-    if (trackId) {
-      const info = await fetchAudioFeatures(trackId);
-      tracksWithInfo.push({
-        ...trackItem.track,
-        ...info,
-      });
-    }
-  }
-
-  return {
-    playlistName: playlist.name,
-    ownerName: playlist.owner.display_name,
-    length: playlist.tracks.length,
-    medianBPM: getInfo(tracksWithInfo, "tempo").median,
-    tracks: tracksWithInfo.map((item) => ({
-      title: item.name,
-      artist: item.artists
-        .map((artist: { name: string }) => artist.name)
-        .join(", "),
-      bpm: item.tempo,
-    })),
-  };
-}
-
-export async function getTrackDetails(trackId: string) {
-  const trackData = await fetchTrackData(trackId);
-  const trackFeatures = await fetchAudioFeatures(trackId);
-
-  const result = {
-    title: trackData.name,
-    artist: trackData.artists
-      .map((artist: { name: string }) => artist.name)
-      .join(", "),
-    album: trackData.album.name,
-    // @ts-ignore-next-line
-    label: trackData.album.label,
-    releaseDate: trackData.album.release_date,
-    bpm: trackFeatures.tempo,
-  };
-
-  return result;
-}
 
 export function getTrackId(input: string) {
   const regex =
