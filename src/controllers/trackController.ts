@@ -1,5 +1,5 @@
 import { Context } from "koa";
-import { spotifyClient } from "../spotify";
+import { isSpotifyId, spotifyClient } from "../spotify";
 
 export async function getTrackDetails(ctx: Context) {
   const trackId = ctx.params.id;
@@ -7,6 +7,12 @@ export async function getTrackDetails(ctx: Context) {
   if (!trackId) {
     ctx.status = 400;
     ctx.body = { error: "Track ID is required" };
+    return;
+  }
+
+  if (!isSpotifyId(trackId)) {
+    ctx.status = 400;
+    ctx.body = { error: "Invalid track ID" };
     return;
   }
 

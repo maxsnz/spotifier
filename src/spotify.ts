@@ -139,6 +139,7 @@ class SpotifyClient {
   }
 
   async fetchAudioFeatures(trackId: string) {
+    if (!isSpotifyId(trackId)) throw new Error("Invalid Spotify ID");
     const cachePath = path.join(audioFeaturesDir, `${trackId}.json`);
     let data = readCache(cachePath);
     if (!data) {
@@ -163,6 +164,7 @@ class SpotifyClient {
   }
 
   async fetchTrackData(trackId: string) {
+    if (!isSpotifyId(trackId)) throw new Error("Invalid Spotify ID");
     const cachePath = path.join(trackDataDir, `${trackId}.json`);
     let data = readCache(cachePath);
     if (!data) {
@@ -329,6 +331,11 @@ const getInfo = (tracks: any[], key: string) => {
 
   return result;
 };
+
+// Spotify IDs are base62; also keeps cache file names inside the cache dirs
+export function isSpotifyId(id: string) {
+  return /^[a-zA-Z0-9]+$/.test(id);
+}
 
 export function getTrackId(input: string) {
   const regex =
