@@ -9,7 +9,6 @@ import {
   getFormatTime,
   getMedianIntervalLength,
 } from "./countTime";
-import { fileLinkQueue } from "./utils/downloadQueue";
 dotenv.config();
 
 class Bot {
@@ -151,71 +150,6 @@ ${playlist.tracks
       } catch (error) {
         logError(error);
         await ctx.reply("An error occurred. Please try again later.");
-      }
-    });
-
-    // Handle audio messages
-    this.instance.on(message("audio"), async (ctx) => {
-      try {
-        const audio = ctx.message.audio;
-        if (!audio) {
-          await ctx.reply("Audio file not found");
-          return;
-        }
-
-        const fileId = audio.file_id;
-        const messageId = ctx.message.message_id;
-        const chatId = ctx.message.chat.id;
-
-        // Enqueue task to get file link
-        fileLinkQueue.enqueue({
-          fileId,
-          ctx,
-          messageId,
-          chatId,
-        });
-      } catch (error) {
-        logError(error);
-        await ctx.reply("An error occurred while processing audio file.");
-      }
-    });
-
-    // Handle document messages (for audio files sent as documents)
-    this.instance.on(message("document"), async (ctx) => {
-      try {
-        const document = ctx.message.document;
-        if (!document) {
-          await ctx.reply("Document not found");
-          return;
-        }
-
-        // Check if document is an audio file by mime type
-        const mimeType = document.mime_type || "";
-        const isAudioFile =
-          mimeType.startsWith("audio/") ||
-          /\.(mp3|wav|ogg|m4a|flac|aac|opus|wma)$/i.test(
-            document.file_name || "",
-          );
-
-        if (!isAudioFile) {
-          // Not an audio file, ignore
-          return;
-        }
-
-        const fileId = document.file_id;
-        const messageId = ctx.message.message_id;
-        const chatId = ctx.message.chat.id;
-
-        // Enqueue task to get file link
-        fileLinkQueue.enqueue({
-          fileId,
-          ctx,
-          messageId,
-          chatId,
-        });
-      } catch (error) {
-        logError(error);
-        await ctx.reply("An error occurred while processing audio file.");
       }
     });
   }
